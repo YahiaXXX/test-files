@@ -39,6 +39,7 @@ function About() {
           </div>
           <p>
           Ambitious and self-motivied person, Web developer with a good level of experience due to working on many projects.
+          HELLO
           </p>
 
           <a className="btn btn-primary" href="#contact">Let's Talk</a>
