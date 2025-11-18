@@ -1,9 +1,8 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import Contact from "./Contact";
+import Contact from "./components/contact/Contact.jsx";
 import '@testing-library/jest-dom';
 import emailjs from "@emailjs/browser";
 
-// Mock emailjs
 jest.mock("@emailjs/browser", () => ({
   sendForm: jest.fn(),
 }));
@@ -33,7 +32,7 @@ describe("Contact Component", () => {
 
     render(<Contact />);
 
-    // Fill form
+  
     fireEvent.change(screen.getByPlaceholderText(/Your Full Name/i), {
       target: { value: "John Doe" },
     });
@@ -44,10 +43,10 @@ describe("Contact Component", () => {
       target: { value: "Hello there!" },
     });
 
-    // Submit form
+  
     fireEvent.submit(screen.getByRole("button", { name: /Send Message/i }));
 
-    // Wait for async call
+  
     await waitFor(() => expect(emailjs.sendForm).toHaveBeenCalledTimes(1));
   });
 
@@ -63,10 +62,10 @@ describe("Contact Component", () => {
     render(<Contact />);
     fireEvent.submit(screen.getByRole("button", { name: /Send Message/i }));
 
-    // Loader should appear
+  
     expect(screen.getByText(/Loading/i)).toBeInTheDocument();
 
-    // Resolve promise
+    
     resolvePromise({ text: "OK" });
 
     await waitFor(() =>
