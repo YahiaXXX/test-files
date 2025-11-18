@@ -1,4 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
+// src/setupTests.js
+import '@testing-library/jest-dom';
 import UserList from "./UserList";
 import { formatUserName } from "./utils";
 
