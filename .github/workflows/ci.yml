@@ -105,7 +105,7 @@ on:
 
 jobs:
   docker:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -131,7 +131,7 @@ jobs:
           tags: |
             ghcr.io/${{ env.REPO_LOWER }}:latest
             ghcr.io/${{ env.REPO_LOWER }}:${{ github.sha }}
-            
+
       - name: Setup npm registry
         run: |
          echo "registry=https://trialsga2025.jfrog.io/artifactory/api/npm/sga-npm/" > .npmrc
