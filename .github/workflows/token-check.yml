@@ -1,0 +1,30 @@
+name: Token Expiration Check
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  token-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install nodemailer
+
+      - name: Run token expiration check
+        env:
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          API_KEY: ${{ secrets.API_KEY }}
+          SECRET_TOKEN: ${{ secrets.SECRET_TOKEN }}
+          JWT_TOKEN: ${{ secrets.JWT_TOKEN }}
+        run: node scripts/check-tokens.js
