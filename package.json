@@ -2,7 +2,7 @@
   "name": "portfolio",
   "homepage": "http://yahiaboukh.com",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "dependencies": {
     "@emailjs/browser": "^3.9.1",
     "@react-three/drei": "^9.40.0",
