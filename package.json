@@ -1,7 +1,7 @@
 {
-  "name": "portfolio-test-3",
+  "name": "portfolio-test-4",
   "homepage": "http://yahiaboukh.com",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": false,
   "dependencies": {
     "@emailjs/browser": "^3.9.1",

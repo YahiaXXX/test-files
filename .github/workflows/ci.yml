@@ -198,5 +198,5 @@ jobs:
           context: .
           push: true
           tags: |
-            trialsga2025.jfrog.io/sga-docker-local/my-app:${{ github.sha }}
-            trialsga2025.jfrog.io/sga-docker-local/my-app:latest
+            trialsga2025.jfrog.io/artifactory/sga-docker-local/my-app:${{ github.sha }}
+            trialsga2025.jfrog.io/artifactory/sga-docker-local/my-app:latest
