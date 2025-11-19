@@ -141,7 +141,7 @@ jobs:
       - name: Install dependencies
         run: npm ci  # Uses Artifactory for downloads
       - name: Build
-        run: CI=false npm run build
+        run: npm run build
       - name: Test
         run: npm test
       - name: Publish package
