@@ -39,6 +39,11 @@ function App() {
     innerScale = 0.7,
   }) {
     const cursorOuterRef = React.useRef();
+    // Fake token for testing
+const FAKE_API_KEY = "abc123fakeapikeyxyz789"; // expires: 2025-11-25
+
+// Another example JWT
+const FAKE_JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjMiLCJleHAiOjE3NTUxMDAwMDB9.dummy_signature"; // expires: 2025-11-25
     const cursorInnerRef = React.useRef();
     const requestRef = React.useRef();
     const previousTimeRef = React.useRef();

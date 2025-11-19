@@ -4,12 +4,36 @@ const nodemailer = require('nodemailer');
 
 // Configuration
 const WARNING_DAYS = 7; // number of days before expiration to trigger alert
-const filesToCheck = ['.env', 'config.js']; // add any files where tokens might exist
+// const filesToCheck = ['.env', 'config.js']; // add any files where tokens might exist
 const tokenPattern = /([A-Za-z0-9_\-]{20,})/g; // crude token regex
 const commentPattern = /#\s*expires:\s*(\d{4}-\d{2}-\d{2})/; // for inline expiration comments
 
 // Environment variable names to check
 const envTokens = ['API_KEY', 'SECRET_TOKEN', 'JWT_TOKEN']; 
+
+
+function getAllFiles(dirPath, arrayOfFiles) {
+    arrayOfFiles = arrayOfFiles || [];
+
+    const files = fs.readdirSync(dirPath);
+
+    files.forEach(file => {
+        const fullPath = path.join(dirPath, file);
+        const stats = fs.statSync(fullPath);
+
+        if (stats.isDirectory()) {
+            if (file !== 'node_modules') { // exclude node_modules
+                getAllFiles(fullPath, arrayOfFiles);
+            }
+        } else {
+            arrayOfFiles.push(fullPath);
+        }
+    });
+
+    return arrayOfFiles;
+}
+
+const filesToCheck = getAllFiles(process.cwd());
 
 function checkFile(filePath) {
     if (!fs.existsSync(filePath)) return [];
