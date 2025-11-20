@@ -32,7 +32,7 @@ jobs:
       - name: Check JFrog token expiry
         id: check
         run: |
-          TOKEN="$JFROG_TOKEN_NPM"
+          TOKEN="$ARTIFACTORY_TOKEN"
           DECODED=$(echo "$TOKEN" | base64 --decode)
           EXPIRY_EPOCH=$(echo "$DECODED" | cut -d ':' -f3)
           NOW=$(date +%s)
@@ -42,7 +42,7 @@ jobs:
           echo "Token expires in $DAYS_LEFT days"
 
       - name: Renew JFrog token if near expiry
-        if: ${{ steps.check.outputs.days_left <= 7 }}
+        if: ${{ steps.check.outputs.days_left <= 365 }}
         id: renew
         run: |
          echo "Token expired, generating new token..."
