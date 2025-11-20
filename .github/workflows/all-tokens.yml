@@ -191,6 +191,9 @@ jobs:
         id: check-tokens
         run: |
           declare -A SECRETS_MAP
+           JFROG_USER="${{ secrets.JFROG_USER }}"
+           JFROG_PASSWORD="${{ secrets.ARTIFACTORY_PASSWORD2 }}"
+           JFROG_URL="https://trialsga2025.jfrog.io"
           SECRETS_MAP=(
             ["ARTIFACTORY_TOKEN"]="${{ secrets.ARTIFACTORY_TOKEN }}"
             ["API_KEY"]="${{ secrets.API_KEY }}"
@@ -226,14 +229,13 @@ jobs:
            if [[ "$NAME" == "ARTIFACTORY_TOKEN" && $DAYS_LEFT -le $WARNING_DAYS ]]; then
               echo "ARTIFACTORY_TOKEN is near expiry, renewing..."
 
-              RESPONSE=$(curl -s -H "Authorization: Bearer $JFROG_PASSWORD" \
-                -X POST "https://trialsga2025.jfrog.io/access/api/v1/tokens" \
-                -H "Content-Type: application/json" \
-                -d '{
-                      "username": "'"$JFROG_USER"'",
-                      "scope": "artifact:sga-npm:r,w",
-                      "expires_in": 86400
-                    }')
+              RESPONSE=$(curl -s -H "Authorization: Bearer $JFROG_PASSWORD" -X POST "$JFROG_URL/access/api/v1/tokens" \
+              -H "Content-Type: application/json" \
+              -d '{
+                  "username": "'"$JFROG_USER"'",
+                  "scope": "artifact:sga-npm:r,w",
+                  "expires_in": 86400
+                }')
 
               NEW_TOKEN=$(echo "$RESPONSE" | jq -r '.access_token')
               if [[ "$NEW_TOKEN" == "" || "$NEW_TOKEN" == "null" ]]; then
