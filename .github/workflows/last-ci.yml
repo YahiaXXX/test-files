@@ -69,13 +69,13 @@ jobs:
           echo "new_token=$NEW_TOKEN" >> $GITHUB_OUTPUT
 
       - name: Update GitHub secret with new JFrog token
-        if: ${{ steps.check.outputs.days_left <= 7 }}
+        if: ${{ steps.check.outputs.days_left <= 365 }}
         run: |
           echo "New token obtained: ${{ steps.renew.outputs.new_token }}"
           echo "${{ steps.renew.outputs.new_token }}" | gh secret set ARTIFACTORY_TOKEN --repo "$GITHUB_REPO"
 
       - name: Create GitHub issue if token was renewed
-        if: ${{ steps.check.outputs.days_left <= 7 }}
+        if: ${{ steps.check.outputs.days_left <= 365 }}
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
