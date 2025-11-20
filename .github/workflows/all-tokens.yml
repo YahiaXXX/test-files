@@ -1,3 +1,161 @@
+# name: JFrog Token Check & NPM Publish
+
+# on:
+#   push:
+#     branches: [main]
+#   workflow_dispatch:
+#   schedule:
+#     - cron: "0 5 * * *"
+
+# permissions:
+#   contents: read
+#   packages: write
+#   issues: write
+
+# jobs:
+#   check-renew-npm:
+#     runs-on: ubuntu-latest
+#     env:
+#       JFROG_USER: ${{ secrets.JFROG_USER }}
+#       JFROG_PASSWORD: ${{ secrets.JFROG_PASSWORD }}
+#       GH_PAT: ${{ secrets.GH_PAT }}
+#       GITHUB_REPO: ${{ github.repository }}
+#       ARTIFACTORY_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
+#     steps:
+#       - name: Install dependencies
+#         run: sudo apt-get update && sudo apt-get install -y gh curl jq mailutils
+
+#       - name: Authenticate GitHub CLI
+#         run: echo "$GH_PAT" | gh auth login --with-token
+
+#       - uses: actions/checkout@v4
+
+#       # -------------------------
+#       # Check ARTIFACTORY_TOKEN
+#       # -------------------------
+#       - name: Check JFrog token expiry
+#         id: check_artifactory
+#         run: |
+#           TOKEN="$ARTIFACTORY_TOKEN"
+#           DECODED=$(echo "$TOKEN" | base64 --decode)
+#           EXPIRY_EPOCH=$(echo "$DECODED" | cut -d ':' -f3)
+#           NOW=$(date +%s)
+#           DIFF=$((EXPIRY_EPOCH - NOW))
+#           DAYS_LEFT=$((DIFF / 86400))
+#           echo "days_left=$DAYS_LEFT" >> $GITHUB_OUTPUT
+#           echo "ARTIFACTORY_TOKEN expires in $DAYS_LEFT days"
+
+#       - name: Renew ARTIFACTORY_TOKEN if near expiry
+#         if: ${{ steps.check_artifactory.outputs.days_left <= 365 }}
+#         id: renew_artifactory
+#         run: |
+#           echo "ARTIFACTORY_TOKEN is near expiry, generating new token..."
+#           RESPONSE=$(curl -s -H "Authorization: Bearer $JFROG_PASSWORD" -X POST "https://trialsga2025.jfrog.io/access/api/v1/tokens" \
+#             -H "Content-Type: application/json" \
+#             -d '{
+#                   "username": "'"$JFROG_USER"'",
+#                   "scope": "artifact:sga-npm:r,w",
+#                   "expires_in": 604800
+#                 }')
+#           NEW_TOKEN=$(echo "$RESPONSE" | jq -r '.access_token')
+#           echo "new_token=$NEW_TOKEN" >> $GITHUB_OUTPUT
+#           echo "New token obtained: $NEW_TOKEN"
+
+#       - name: Update ARTIFACTORY_TOKEN secret
+#         if: ${{ steps.check_artifactory.outputs.days_left <= 365 }}
+#         run: |
+#           echo "${{ steps.renew_artifactory.outputs.new_token }}" | gh secret set ARTIFACTORY_TOKEN --repo "$GITHUB_REPO"
+
+#       # -------------------------
+#       # Check other secrets (fake tokens etc)
+#       # -------------------------
+#       - name: Check other secrets
+#         id: check_secrets
+#         run: |
+#           TOKENS_TO_CHECK=("API_KEY" "SECRET_TOKEN" "JWT_TOKEN") # add your other secrets here
+#           ALERTS="[]"
+#           for T in "${TOKENS_TO_CHECK[@]}"; do
+#             VAL="${{ secrets.${T} }}"
+#             if [[ -n "$VAL" ]]; then
+#               # Attempt to decode JWT or detect near expiry from comment
+#               if [[ "$VAL" == *.*.* ]]; then
+#                 PAYLOAD=$(echo "$VAL" | cut -d'.' -f2 | base64 --decode 2>/dev/null)
+#                 EXP=$(echo "$PAYLOAD" | jq -r '.exp' 2>/dev/null)
+#                 if [[ -n "$EXP" && "$EXP" != "null" ]]; then
+#                   NOW=$(date +%s)
+#                   DIFF=$((EXP - NOW))
+#                   DAYS_LEFT=$((DIFF / 86400))
+#                   if (( DAYS_LEFT <= 7 )); then
+#                     ALERTS=$(echo "$ALERTS" | jq --arg t "$T" --arg d "$DAYS_LEFT" '. += [{"token":$t,"days_left":$d}]')
+#                   fi
+#                 fi
+#               else
+#                 # Optionally parse comments for expiry (// expires: YYYY-MM-DD)
+#                 COMMENT_EXP=$(grep -Po "// expires: \K[0-9-]+" "./src/**/*" | head -n1)
+#                 if [[ -n "$COMMENT_EXP" ]]; then
+#                   EXP_TS=$(date -d "$COMMENT_EXP" +%s)
+#                   NOW=$(date +%s)
+#                   DIFF=$((EXP_TS - NOW))
+#                   DAYS_LEFT=$((DIFF / 86400))
+#                   if (( DAYS_LEFT <= 7 )); then
+#                     ALERTS=$(echo "$ALERTS" | jq --arg t "$T" --arg d "$DAYS_LEFT" '. += [{"token":$t,"days_left":$d}]')
+#                   fi
+#                 fi
+#               fi
+#             fi
+#           done
+#           echo "alerts=$ALERTS" >> $GITHUB_OUTPUT
+#           echo "Secrets near expiry: $ALERTS"
+
+#       - name: Notify for other expiring tokens
+#         if: ${{ steps.check_secrets.outputs.alerts != '[]' }}
+#         run: |
+#           echo "${{ steps.check_secrets.outputs.alerts }}" | mail -s "Token Expiry Alert" ${{ secrets.EMAIL_TO }}
+
+#       - name: Create issue for other expiring tokens
+#         if: ${{ steps.check_secrets.outputs.alerts != '[]' }}
+#         uses: actions/github-script@v7
+#         with:
+#           github-token: ${{ secrets.GITHUB_TOKEN }}
+#           script: |
+#             const alerts = JSON.parse("${{ steps.check_secrets.outputs.alerts }}");
+#             const title = "⚠️ Some tokens are near expiry";
+#             const body = `The following tokens require renewal:\n\`\`\`json\n${JSON.stringify(alerts, null, 2)}\n\`\`\``;
+#             await github.rest.issues.create({
+#               owner: context.repo.owner,
+#               repo: context.repo.repo,
+#               title,
+#               body,
+#               labels: ["security","token","urgent"]
+#             });
+
+#       # -------------------------
+#       # NPM publish
+#       # -------------------------
+#       - name: Setup npm registry
+#         run: |
+#           echo "registry=https://trialsga2025.jfrog.io/artifactory/api/npm/sga-npm/" > .npmrc
+#           echo "//trialsga2025.jfrog.io/artifactory/api/npm/sga-npm/:_authToken=${{ secrets.ARTIFACTORY_TOKEN }}" >> .npmrc
+
+#       - name: Install dependencies
+#         run: npm install
+
+#       - name: Build project
+#         run: CI=false npm run build
+
+#       - name: Test project
+#         run: npm test
+
+#       - name: Publish package to Artifactory
+#         if: github.ref == 'refs/heads/main'
+#         run: npm publish
+
+
+
+
+
+
+
 name: JFrog Token Check & NPM Publish
 
 on:
@@ -20,118 +178,106 @@ jobs:
       JFROG_PASSWORD: ${{ secrets.JFROG_PASSWORD }}
       GH_PAT: ${{ secrets.GH_PAT }}
       GITHUB_REPO: ${{ github.repository }}
-      ARTIFACTORY_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
     steps:
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y gh curl jq mailutils
+        run: sudo apt-get update && sudo apt-get install -y gh curl jq
 
       - name: Authenticate GitHub CLI
         run: echo "$GH_PAT" | gh auth login --with-token
 
       - uses: actions/checkout@v4
 
-      # -------------------------
-      # Check ARTIFACTORY_TOKEN
-      # -------------------------
-      - name: Check JFrog token expiry
-        id: check_artifactory
+      - name: Check and renew tokens
+        id: check-tokens
         run: |
-          TOKEN="$ARTIFACTORY_TOKEN"
-          DECODED=$(echo "$TOKEN" | base64 --decode)
-          EXPIRY_EPOCH=$(echo "$DECODED" | cut -d ':' -f3)
-          NOW=$(date +%s)
-          DIFF=$((EXPIRY_EPOCH - NOW))
-          DAYS_LEFT=$((DIFF / 86400))
-          echo "days_left=$DAYS_LEFT" >> $GITHUB_OUTPUT
-          echo "ARTIFACTORY_TOKEN expires in $DAYS_LEFT days"
+          declare -A SECRETS_MAP
+          SECRETS_MAP=(
+            ["ARTIFACTORY_TOKEN"]="${{ secrets.ARTIFACTORY_TOKEN }}"
+            ["API_KEY"]="${{ secrets.API_KEY }}"
+            ["SECRET_TOKEN"]="${{ secrets.SECRET_TOKEN }}"
+          )
 
-      - name: Renew ARTIFACTORY_TOKEN if near expiry
-        if: ${{ steps.check_artifactory.outputs.days_left <= 365 }}
-        id: renew_artifactory
-        run: |
-          echo "ARTIFACTORY_TOKEN is near expiry, generating new token..."
-          RESPONSE=$(curl -s -H "Authorization: Bearer $JFROG_PASSWORD" -X POST "https://trialsga2025.jfrog.io/access/api/v1/tokens" \
-            -H "Content-Type: application/json" \
-            -d '{
-                  "username": "'"$JFROG_USER"'",
-                  "scope": "artifact:sga-npm:r,w",
-                  "expires_in": 604800
-                }')
-          NEW_TOKEN=$(echo "$RESPONSE" | jq -r '.access_token')
-          echo "new_token=$NEW_TOKEN" >> $GITHUB_OUTPUT
-          echo "New token obtained: $NEW_TOKEN"
+          WARNING_DAYS=7
+          ALERTS=()
 
-      - name: Update ARTIFACTORY_TOKEN secret
-        if: ${{ steps.check_artifactory.outputs.days_left <= 365 }}
-        run: |
-          echo "${{ steps.renew_artifactory.outputs.new_token }}" | gh secret set ARTIFACTORY_TOKEN --repo "$GITHUB_REPO"
+          for NAME in "${!SECRETS_MAP[@]}"; do
+            TOKEN="${SECRETS_MAP[$NAME]}"
+            EXPIRES="unknown"
 
-      # -------------------------
-      # Check other secrets (fake tokens etc)
-      # -------------------------
-      - name: Check other secrets
-        id: check_secrets
-        run: |
-          TOKENS_TO_CHECK=("API_KEY" "SECRET_TOKEN" "JWT_TOKEN") # add your other secrets here
-          ALERTS="[]"
-          for T in "${TOKENS_TO_CHECK[@]}"; do
-            VAL="${{ secrets.${T} }}"
-            if [[ -n "$VAL" ]]; then
-              # Attempt to decode JWT or detect near expiry from comment
-              if [[ "$VAL" == *.*.* ]]; then
-                PAYLOAD=$(echo "$VAL" | cut -d'.' -f2 | base64 --decode 2>/dev/null)
-                EXP=$(echo "$PAYLOAD" | jq -r '.exp' 2>/dev/null)
-                if [[ -n "$EXP" && "$EXP" != "null" ]]; then
+            # Try decoding JWT style token
+            if [[ $(echo "$TOKEN" | grep -o "\.") ]]; then
+              PAYLOAD=$(echo "$TOKEN" | cut -d '.' -f2 | base64 --decode 2>/dev/null)
+              if [[ "$PAYLOAD" != "" ]]; then
+                EXP=$(echo "$PAYLOAD" | jq -r '.exp // empty')
+                if [[ "$EXP" != "" ]]; then
                   NOW=$(date +%s)
                   DIFF=$((EXP - NOW))
                   DAYS_LEFT=$((DIFF / 86400))
-                  if (( DAYS_LEFT <= 7 )); then
-                    ALERTS=$(echo "$ALERTS" | jq --arg t "$T" --arg d "$DAYS_LEFT" '. += [{"token":$t,"days_left":$d}]')
-                  fi
-                fi
-              else
-                # Optionally parse comments for expiry (// expires: YYYY-MM-DD)
-                COMMENT_EXP=$(grep -Po "// expires: \K[0-9-]+" "./src/**/*" | head -n1)
-                if [[ -n "$COMMENT_EXP" ]]; then
-                  EXP_TS=$(date -d "$COMMENT_EXP" +%s)
-                  NOW=$(date +%s)
-                  DIFF=$((EXP_TS - NOW))
-                  DAYS_LEFT=$((DIFF / 86400))
-                  if (( DAYS_LEFT <= 7 )); then
-                    ALERTS=$(echo "$ALERTS" | jq --arg t "$T" --arg d "$DAYS_LEFT" '. += [{"token":$t,"days_left":$d}]')
+                  EXPIRES=$(date -d "@$EXP" --iso-8601=seconds)
+                  if (( DAYS_LEFT <= WARNING_DAYS )); then
+                    ALERTS+=("{\"tokenName\":\"$NAME\",\"expires\":\"$EXPIRES\"}")
                   fi
                 fi
               fi
             fi
+
+            # Special: renew ARTIFACTORY_TOKEN automatically
+            if [[ "$NAME" == "ARTIFACTORY_TOKEN" ]]; then
+              if (( DAYS_LEFT <= WARNING_DAYS )); then
+                echo "ARTIFACTORY_TOKEN is near expiry, renewing..."
+
+                RESPONSE=$(curl -s -u "$JFROG_USER:$JFROG_PASSWORD" \
+                  -X POST "https://trialsga2025.jfrog.io/artifactory/api/security/token" \
+                  -d "username=$JFROG_USER&scope=member-of-groups:dev-team&expires_in=604800")
+
+                NEW_TOKEN=$(echo "$RESPONSE" | jq -r '.access_token')
+                if [[ "$NEW_TOKEN" == "" || "$NEW_TOKEN" == "null" ]]; then
+                  echo "Failed to renew ARTIFACTORY_TOKEN"
+                  exit 1
+                fi
+
+                # Update GitHub secret
+                echo "$NEW_TOKEN" | gh secret set ARTIFACTORY_TOKEN --repo "$GITHUB_REPO"
+                echo "ARTIFACTORY_TOKEN renewed and updated in secrets"
+              fi
+            fi
           done
-          echo "alerts=$ALERTS" >> $GITHUB_OUTPUT
-          echo "Secrets near expiry: $ALERTS"
 
-      - name: Notify for other expiring tokens
-        if: ${{ steps.check_secrets.outputs.alerts != '[]' }}
-        run: |
-          echo "${{ steps.check_secrets.outputs.alerts }}" | mail -s "Token Expiry Alert" ${{ secrets.EMAIL_TO }}
+          # Save alerts.json for GitHub issue creation / email
+          echo "[${ALERTS[*]}]" | jq '.' > alerts.json
+          echo "Alerts saved to alerts.json"
 
-      - name: Create issue for other expiring tokens
-        if: ${{ steps.check_secrets.outputs.alerts != '[]' }}
+      - name: Create GitHub issue for tokens near expiry
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const alerts = JSON.parse("${{ steps.check_secrets.outputs.alerts }}");
-            const title = "⚠️ Some tokens are near expiry";
-            const body = `The following tokens require renewal:\n\`\`\`json\n${JSON.stringify(alerts, null, 2)}\n\`\`\``;
-            await github.rest.issues.create({
+            const fs = require("fs");
+            const alerts = JSON.parse(fs.readFileSync("alerts.json", "utf8"));
+            if(alerts.length === 0) { console.log("No tokens near expiry → skipping issue."); return; }
+
+            const title = "⚠️ Tokens Near Expiry"
+            const body = `Some tokens are near expiry:\n\`\`\`json\n${JSON.stringify(alerts,null,2)}\n\`\`\`\nPlease renew them.`;
+
+            const existing = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title,
-              body,
-              labels: ["security","token","urgent"]
+              state: "open",
             });
 
-      # -------------------------
-      # NPM publish
-      # -------------------------
+            if(!existing.data.some(i => i.title === title)) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ["security","token","urgent"]
+              });
+              console.log("GitHub issue created successfully!");
+            } else {
+              console.log("Issue already exists → skipping.");
+            }
+
       - name: Setup npm registry
         run: |
           echo "registry=https://trialsga2025.jfrog.io/artifactory/api/npm/sga-npm/" > .npmrc
