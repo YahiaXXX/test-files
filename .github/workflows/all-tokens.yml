@@ -233,7 +233,7 @@ jobs:
               -H "Content-Type: application/json" \
               -d '{
                   "username": "'"$JFROG_USER"'",
-                  "scope": "artifact:sga-npm:r,w artifact:sga-npm-locale:r,w",
+                  "scope": "artifact:sga-npm:r,w artifact:sga-npm-local:r,w",
                   "expires_in": 86400
                 }')
 
