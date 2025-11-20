@@ -231,7 +231,7 @@ jobs:
           const nodemailer = require('nodemailer');
 
           const WARNING_DAYS = parseInt(process.env.WARNING_DAYS) || 7;
-          const tokenPattern = /([A-Za-z0-9_\-]{20,})/g;
+          const tokenPattern = /\b(?=[A-Za-z0-9_-]{20,})(?=.*[A-Z])(?=.*[a-z])(?=.*\d)[A-Za-z0-9_-]+\b/g;
 
 
           function getAllFiles(dir, arr = []) {
