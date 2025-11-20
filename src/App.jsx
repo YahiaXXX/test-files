@@ -39,6 +39,10 @@ function App() {
     innerScale = 0.7,
   }) {
     const cursorOuterRef = React.useRef();
+
+  // Fake token for testing
+const FAKE_API_KEY2 = "abcAB23fakeapikeyxyz789"; // expires: 2025-11-24
+
     // Fake token for testing
 const FAKE_API_KEY = "abcAB23fakeapikeyxyz789"; // expires: 2025-11-25
 
