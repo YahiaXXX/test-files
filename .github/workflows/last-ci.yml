@@ -89,7 +89,7 @@ jobs:
       - name: Setup npm registry
         run: |
           echo "registry=https://trialsga2025.jfrog.io/artifactory/api/npm/sga-npm/" > .npmrc
-          echo "//trialsga2025.jfrog.io/artifactory/api/npm/sga-npm/:_authToken=${{ steps.renew.outputs.new_token }}" >> .npmrc
+          echo "//trialsga2025.jfrog.io/artifactory/api/npm/sga-npm/:_authToken=${{ secrets.ARTIFACTORY_TOKEN }}" >> .npmrc
 
       - name: Install dependencies
         run: npm install
