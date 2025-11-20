@@ -196,9 +196,9 @@ name: Token Expiration Check
 on:
   push:
     branches: [ main ]
-  permissions:
-    contents: read
-    issues: write  
+permissions:
+  contents: read
+  issues: write  
 
 jobs:
   token-check:
