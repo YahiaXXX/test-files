@@ -3,40 +3,9 @@
 # on:
 #   push:
 #     branches: [ main ]
-
-# jobs:
-#   token-check:
-#     runs-on: ubuntu-latest
-
-#     steps:
-#       - uses: actions/checkout@v4
-
-#       - name: Set up Node.js
-#         uses: actions/setup-node@v3
-#         with:
-#           node-version: 20
-
-#       - name: Install dependencies
-#         run: npm install nodemailer
-
-#       - name: Run token expiration check
-#         env:
-#           EMAIL_USER: ${{ secrets.EMAIL_USER }}
-#           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
-#           EMAIL_TO: ${{ secrets.EMAIL_TO }}
-#           API_KEY: ${{ secrets.API_KEY }}
-#           SECRET_TOKEN: ${{ secrets.SECRET_TOKEN }}
-#           JWT_TOKEN: ${{ secrets.JWT_TOKEN }}
-#         run: node scripts/check-tokens.js
-
-
-
-
-# name: Token Expiration Check
-
-# on:
-#   push:
-#     branches: [ main ]
+# permissions:
+#   contents: read
+#   issues: write  
 
 # jobs:
 #   token-check:
@@ -53,7 +22,7 @@
 #       - name: Install nodemailer
 #         run: npm install nodemailer
 
-#       - name: Check tokens directly in CI
+#       - name: Check tokens and generate alerts.json
 #         env:
 #           EMAIL_USER: ${{ secrets.EMAIL_USER }}
 #           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
@@ -63,122 +32,169 @@
 #           JWT_TOKEN: ${{ secrets.JWT_TOKEN }}
 #           WARNING_DAYS: 7
 #         run: |
-#           node -e "
+#           node << 'EOF'
 #           const fs = require('fs');
 #           const path = require('path');
 #           const nodemailer = require('nodemailer');
 
 #           const WARNING_DAYS = parseInt(process.env.WARNING_DAYS) || 7;
-#           const tokenPattern = /([A-Za-z0-9_\-]{20,})/g;
+#           const tokenPattern = /\b(?=[A-Za-z0-9_-]{20,})(?=.*[A-Z])(?=.*[a-z])(?=.*\d)[A-Za-z0-9_-]+\b/g;
 
-#           function getAllFiles(dir, array=[]) {
-#             for(const f of fs.readdirSync(dir)) {
-#               const full = path.join(dir, f);
-#               if (fs.statSync(full).isDirectory()) {
-#                 if(f !== 'node_modules' && f !== 'build' ) getAllFiles(full, array);
-#               } else array.push(full);
+
+#           function getAllFiles(dir, arr = []) {
+#               const excludedExtensions = ['.png', '.jpg', '.jpeg', '.pdf', '.svg'];
+
+#               for (const f of fs.readdirSync(dir)) {
+#                 const full = path.join(dir, f);
+#                 const stat = fs.statSync(full);
+
+#                 if (stat.isDirectory()) {
+#                   // Only enter 'src' folders or subfolders inside them
+#                   if (f === "src" || dir.includes("src")) {
+#                     getAllFiles(full, arr);
+#                   }
+#                 } else {
+#                   // Only include files inside 'src' folders
+#                   if (dir.includes("src")) {
+#                     const ext = path.extname(f).toLowerCase();
+#                     if (!excludedExtensions.includes(ext)) {
+#                       arr.push(full);
+#                     }
+#                   }
+#                 }
+#               }
+#               return arr;
 #             }
-#             return array;
-#           }
 
 #           function checkFile(file) {
-#             const alerts=[];
-#             if(!fs.existsSync(file)) return alerts;
-#             const lines = fs.readFileSync(file,'utf8').split('\\n');
-#             for(const line of lines){
-#               const tokens = line.match(tokenPattern);
-#               if(tokens){
-#                 tokens.forEach(t=>{
-#                   if(t.split('.').length===3){ // JWT
+#             const alerts = [];
+#             if (!fs.existsSync(file)) return alerts;
+
+#             const lines = fs.readFileSync(file, "utf8").split("\n");
+
+#             for (const line of lines) {
+#               // Match token inside quotes
+#               const matches = line.match(/["']([A-Za-z0-9_-]{20,})["']/g);
+#               if (matches) {
+#                 matches.forEach(tRaw => {
+#                   // Remove quotes
+#                   const t = tRaw.replace(/['"]/g, '');
+#                   let expires = "unknown";
+
+#                   // JWT decoding
+#                   if (t.split('.').length === 3) { 
 #                     try {
-#                       const payload=JSON.parse(Buffer.from(t.split('.')[1],'base64').toString());
-#                       if(payload.exp){
-#                         const diffDays = (new Date(payload.exp*1000)-new Date())/(1000*60*60*24);
-#                         if(diffDays<=WARNING_DAYS) alerts.push({token:t,source:file,expires:new Date(payload.exp*1000).toISOString()});
+#                       const payload = JSON.parse(Buffer.from(t.split('.')[1], 'base64').toString());
+#                       if (payload.exp) {
+#                         const diffDays = (new Date(payload.exp * 1000) - new Date()) / 86400000;
+#                         if (diffDays <= WARNING_DAYS) {
+#                           expires = new Date(payload.exp * 1000).toISOString();
+#                         }
 #                       }
-#                     } catch{}
-#                   } else alerts.push({token:t,source:file,expires:'unknown'});
+#                     } catch {}
+#                   }
+
+#                   // Check for inline comment in the same line
+#                   const commentMatch = line.match(/\/\/\s*expires:\s*(\d{4}-\d{2}-\d{2})/i);
+#                   if (commentMatch) {
+#                     expires = new Date(commentMatch[1]).toISOString();
+#                   }
+
+#                   alerts.push({ token: t, source: file, expires });
 #                 });
 #               }
 #             }
+
 #             return alerts;
 #           }
 
-#           const files=getAllFiles(process.cwd());
-#           let allAlerts=[];
-#           for(const f of files) allAlerts=allAlerts.concat(checkFile(f));
 
-#           // Check env tokens
-#           ['API_KEY','SECRET_TOKEN','JWT_TOKEN'].forEach(name=>{
-#             const value=process.env[name];
-#             if(value){
-#               if(value.split('.').length===3){ // JWT
+#           const files = getAllFiles(process.cwd());
+#           let allAlerts = [];
+
+#           for (const f of files) allAlerts = allAlerts.concat(checkFile(f));
+
+#           // Check environment tokens
+#           ["API_KEY", "SECRET_TOKEN", "JWT_TOKEN"].forEach(name => {
+#             const value = process.env[name];
+#             if (value) {
+#               if (value.split('.').length === 3) { // JWT
 #                 try {
-#                   const payload=JSON.parse(Buffer.from(value.split('.')[1],'base64').toString());
-#                   if(payload.exp){
-#                     const diffDays=(new Date(payload.exp*1000)-new Date())/(1000*60*60*24);
-#                     if(diffDays<=WARNING_DAYS) allAlerts.push({tokenName:name,source:'env',expires:new Date(payload.exp*1000).toISOString()});
+#                   const payload = JSON.parse(Buffer.from(value.split('.')[1], "base64").toString());
+#                   if (payload.exp) {
+#                     const diffDays = (new Date(payload.exp * 1000) - new Date()) / 86400000;
+#                     if (diffDays <= WARNING_DAYS) allAlerts.push({ tokenName: name, source: "env", expires: new Date(payload.exp*1000).toISOString() });
 #                   }
-#                 } catch{}
-#               } else allAlerts.push({tokenName:name,source:'env',expires:'unknown'});
+#                 } catch {}
+#               } else {
+#                 allAlerts.push({ tokenName: name, source: "env", expires: "unknown" });
+#               }
 #             }
 #           });
 
-#           if(allAlerts.length>0){
-#             console.log('Tokens near expiration:',allAlerts);
+#           if (allAlerts.length > 0) {
+#             console.log("Tokens near expiration:", allAlerts);
 
-#             const transporter=nodemailer.createTransport({
-#               service:'gmail',
-#               auth:{user:process.env.EMAIL_USER,pass:process.env.EMAIL_PASS}
+#             // Save alerts to file for next step
+#             fs.writeFileSync("alerts.json", JSON.stringify(allAlerts, null, 2));
+
+#             // Send email alert
+#             const transporter = nodemailer.createTransport({
+#               service: "gmail",
+#               auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
 #             });
 
 #             transporter.sendMail({
 #               from: process.env.EMAIL_USER,
 #               to: process.env.EMAIL_TO,
-#               subject:'⚠️ Token Expiration Alert',
-#               text: JSON.stringify(allAlerts,null,2)
-#             },(err,info)=>{
+#               subject: "⚠️ Token Expiration Alert",
+#               text: JSON.stringify(allAlerts, null, 2)
+#             }, (err, info) => {
 #               if(err) console.log(err);
-#               else console.log('Email sent: '+info.response);
+#               else console.log("Email sent: " + info.response);
 #             });
-#           } else console.log('No tokens near expiration.');
-#           "
+#           } else {
+#             console.log("No tokens near expiration.");
+#             fs.writeFileSync("alerts.json", JSON.stringify([]));
+#           }
+#           EOF
 
-
-
-#       - name: Create GitHub issue
+#       - name: Create GitHub issue if tokens near expiration
 #         uses: actions/github-script@v7
 #         with:
 #           script: |
-#             const fs = require('fs');
-#             const alerts = JSON.parse(fs.readFileSync('alerts.json', 'utf8'));
+#             const fs = require("fs");
+#             const alerts = JSON.parse(fs.readFileSync("alerts.json", "utf8"));
+
+#             if(alerts.length === 0){
+#               console.log("No alerts → skipping issue creation.");
+#               return;
+#             }
 
 #             const title = "⚠️ Token Expiration Alert — Renewal Required";
 
 #             const body = `
-#                     Some tokens in this repository require renewal.
+#                 Some tokens in this repository require renewal.
 
-#                     ### 🔥 Found tokens:
-#                     \`\`\`json
-#                     ${JSON.stringify(alerts, null, 2)}
-#                     \`\`\`
+#                 ### 🔥 Found tokens:
+#                 \`\`\`json
+#                 ${JSON.stringify(alerts, null, 2)}
+#                 \`\`\`
 
-#                     ⚠️ Please renew them as soon as possible.
-#                     `;
+#                 ⚠️ Please renew them as soon as possible.
+#                 `;
 
-#             // Check if issue already exists
 #             const existing = await github.rest.issues.listForRepo({
 #               owner: context.repo.owner,
 #               repo: context.repo.repo,
 #               state: "open",
 #             });
 
-#             if (existing.data.some(issue => issue.title === title)) {
-#               console.log("Issue already exists. Skipping.");
+#             if (existing.data.some(i => i.title === title)) {
+#               console.log("Issue already exists → skipping.");
 #               return;
 #             }
 
-#             // Create new issue
 #             await github.rest.issues.create({
 #               owner: context.repo.owner,
 #               repo: context.repo.repo,
@@ -187,216 +203,7 @@
 #               labels: ["security", "token", "urgent"]
 #             });
 
-
-
-
-
-name: Token Expiration Check
-
-on:
-  push:
-    branches: [ main ]
-permissions:
-  contents: read
-  issues: write  
-
-jobs:
-  token-check:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 20
-
-      - name: Install nodemailer
-        run: npm install nodemailer
-
-      - name: Check tokens and generate alerts.json
-        env:
-          EMAIL_USER: ${{ secrets.EMAIL_USER }}
-          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
-          EMAIL_TO: ${{ secrets.EMAIL_TO }}
-          API_KEY: ${{ secrets.API_KEY }}
-          SECRET_TOKEN: ${{ secrets.SECRET_TOKEN }}
-          JWT_TOKEN: ${{ secrets.JWT_TOKEN }}
-          WARNING_DAYS: 7
-        run: |
-          node << 'EOF'
-          const fs = require('fs');
-          const path = require('path');
-          const nodemailer = require('nodemailer');
-
-          const WARNING_DAYS = parseInt(process.env.WARNING_DAYS) || 7;
-          const tokenPattern = /\b(?=[A-Za-z0-9_-]{20,})(?=.*[A-Z])(?=.*[a-z])(?=.*\d)[A-Za-z0-9_-]+\b/g;
-
-
-          function getAllFiles(dir, arr = []) {
-              const excludedExtensions = ['.png', '.jpg', '.jpeg', '.pdf', '.svg'];
-
-              for (const f of fs.readdirSync(dir)) {
-                const full = path.join(dir, f);
-                const stat = fs.statSync(full);
-
-                if (stat.isDirectory()) {
-                  // Only enter 'src' folders or subfolders inside them
-                  if (f === "src" || dir.includes("src")) {
-                    getAllFiles(full, arr);
-                  }
-                } else {
-                  // Only include files inside 'src' folders
-                  if (dir.includes("src")) {
-                    const ext = path.extname(f).toLowerCase();
-                    if (!excludedExtensions.includes(ext)) {
-                      arr.push(full);
-                    }
-                  }
-                }
-              }
-              return arr;
-            }
-
-          function checkFile(file) {
-            const alerts = [];
-            if (!fs.existsSync(file)) return alerts;
-
-            const lines = fs.readFileSync(file, "utf8").split("\n");
-
-            for (const line of lines) {
-              // Match token inside quotes
-              const matches = line.match(/["']([A-Za-z0-9_-]{20,})["']/g);
-              if (matches) {
-                matches.forEach(tRaw => {
-                  // Remove quotes
-                  const t = tRaw.replace(/['"]/g, '');
-                  let expires = "unknown";
-
-                  // JWT decoding
-                  if (t.split('.').length === 3) { 
-                    try {
-                      const payload = JSON.parse(Buffer.from(t.split('.')[1], 'base64').toString());
-                      if (payload.exp) {
-                        const diffDays = (new Date(payload.exp * 1000) - new Date()) / 86400000;
-                        if (diffDays <= WARNING_DAYS) {
-                          expires = new Date(payload.exp * 1000).toISOString();
-                        }
-                      }
-                    } catch {}
-                  }
-
-                  // Check for inline comment in the same line
-                  const commentMatch = line.match(/\/\/\s*expires:\s*(\d{4}-\d{2}-\d{2})/i);
-                  if (commentMatch) {
-                    expires = new Date(commentMatch[1]).toISOString();
-                  }
-
-                  alerts.push({ token: t, source: file, expires });
-                });
-              }
-            }
-
-            return alerts;
-          }
-
-
-          const files = getAllFiles(process.cwd());
-          let allAlerts = [];
-
-          for (const f of files) allAlerts = allAlerts.concat(checkFile(f));
-
-          // Check environment tokens
-          ["API_KEY", "SECRET_TOKEN", "JWT_TOKEN"].forEach(name => {
-            const value = process.env[name];
-            if (value) {
-              if (value.split('.').length === 3) { // JWT
-                try {
-                  const payload = JSON.parse(Buffer.from(value.split('.')[1], "base64").toString());
-                  if (payload.exp) {
-                    const diffDays = (new Date(payload.exp * 1000) - new Date()) / 86400000;
-                    if (diffDays <= WARNING_DAYS) allAlerts.push({ tokenName: name, source: "env", expires: new Date(payload.exp*1000).toISOString() });
-                  }
-                } catch {}
-              } else {
-                allAlerts.push({ tokenName: name, source: "env", expires: "unknown" });
-              }
-            }
-          });
-
-          if (allAlerts.length > 0) {
-            console.log("Tokens near expiration:", allAlerts);
-
-            // Save alerts to file for next step
-            fs.writeFileSync("alerts.json", JSON.stringify(allAlerts, null, 2));
-
-            // Send email alert
-            const transporter = nodemailer.createTransport({
-              service: "gmail",
-              auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
-            });
-
-            transporter.sendMail({
-              from: process.env.EMAIL_USER,
-              to: process.env.EMAIL_TO,
-              subject: "⚠️ Token Expiration Alert",
-              text: JSON.stringify(allAlerts, null, 2)
-            }, (err, info) => {
-              if(err) console.log(err);
-              else console.log("Email sent: " + info.response);
-            });
-          } else {
-            console.log("No tokens near expiration.");
-            fs.writeFileSync("alerts.json", JSON.stringify([]));
-          }
-          EOF
-
-      - name: Create GitHub issue if tokens near expiration
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require("fs");
-            const alerts = JSON.parse(fs.readFileSync("alerts.json", "utf8"));
-
-            if(alerts.length === 0){
-              console.log("No alerts → skipping issue creation.");
-              return;
-            }
-
-            const title = "⚠️ Token Expiration Alert — Renewal Required";
-
-            const body = `
-                Some tokens in this repository require renewal.
-
-                ### 🔥 Found tokens:
-                \`\`\`json
-                ${JSON.stringify(alerts, null, 2)}
-                \`\`\`
-
-                ⚠️ Please renew them as soon as possible.
-                `;
-
-            const existing = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: "open",
-            });
-
-            if (existing.data.some(i => i.title === title)) {
-              console.log("Issue already exists → skipping.");
-              return;
-            }
-
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title,
-              body,
-              labels: ["security", "token", "urgent"]
-            });
-
-            console.log("GitHub issue created successfully!");
+#             console.log("GitHub issue created successfully!");
 
 
 
