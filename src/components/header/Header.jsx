@@ -1,10 +1,8 @@
-import React, { Suspense } from "react";
+
 import "./header.css";
 import CTA from "./CTA";
 import HeaderSocials from "./HeaderSocials";
-import {Canvas} from "@react-three/fiber"
-import AnimatedSphere from "../AnimatedSphere";
-import {OrbitControls} from "@react-three/drei"
+
 import {motion} from "framer-motion"
 import AnimatedLetter from "./AnimatedLetter";
 
@@ -50,7 +48,7 @@ function Header() {
       
      
     </header>
-    <div className="canvas-div">
+    {/* <div className="canvas-div">
      <Canvas className="canvas" >
        <OrbitControls enableZoom={false} />
        <ambientLight intensity={0.5}/>
@@ -60,7 +58,7 @@ function Header() {
        </Suspense>
       
      </Canvas>
-     </div>
+     </div> */}
     </>
     
     
