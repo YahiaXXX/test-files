@@ -1,3 +1,120 @@
+# name: JFrog Token Check & NPM Publish
+
+# on:
+#   push:
+#     branches: [main]
+#   workflow_dispatch:
+#   schedule:
+#     - cron: "0 5 * * *"
+
+# permissions:
+#   contents: read
+#   packages: write
+#   issues: write
+
+# jobs:
+#   check-renew-npm:
+#     runs-on: ubuntu-latest
+#     env:
+#       JFROG_USER: ${{ secrets.JFROG_USER }}
+#       JFROG_PASSWORD: ${{ secrets.JFROG_PASSWORD }}
+#       GH_PAT: ${{ secrets.GH_PAT }}
+#       GITHUB_REPO: ${{ github.repository }}
+#       ARTIFACTORY_TOKEN : ${{ secrets.ARTIFACTORY_TOKEN }}
+#     steps:
+#       - name: Install dependencies
+#         run: sudo apt-get update && sudo apt-get install -y gh curl jq
+
+#       - name: Authenticate GitHub CLI
+#         run: echo "$GH_PAT" | gh auth login --with-token
+
+#       - uses: actions/checkout@v4
+
+#       - name: Check JFrog token expiry
+#         id: check
+#         run: |
+#           TOKEN="$ARTIFACTORY_TOKEN"
+#           DAYS_LEFT=0
+#           if [[ "$TOKEN" == reftkn:* ]]; then
+#             DECODED=$(echo "$TOKEN" | base64 --decode 2>/dev/null || echo "$TOKEN")
+#             EXPIRY_EPOCH=$(echo "$DECODED" | cut -d ':' -f3)
+#           elif [[ "$TOKEN" =~ ^ey ]]; then
+#             PAYLOAD=$(echo "$TOKEN" | cut -d '.' -f2 | base64 --decode | tr -d '\n')
+#             EXPIRY_EPOCH=$(echo "$PAYLOAD" | jq -r '.exp')
+#           else
+#             echo "Unknown token format"
+#             EXPIRY_EPOCH=0
+#           fi
+#           NOW=$(date +%s)
+#           DIFF=$((EXPIRY_EPOCH - NOW))
+#           DAYS_LEFT=$((DIFF / 86400))
+#           echo "days_left=$DAYS_LEFT" >> $GITHUB_OUTPUT
+#           echo "$DAYS_LEFT days left for ${{ matrix.token.name }}"
+
+#       - name: Renew JFrog token if near expiry
+#         id: renew
+#         run: |
+#          echo "Token expired, generating new token..."
+          
+#           # JFrog credentials (stored in GitHub Secrets)
+#           JFROG_USER="${{ secrets.JFROG_USER }}"
+#           JFROG_PASSWORD="${{ secrets.ARTIFACTORY_PASSWORD2 }}"
+#           JFROG_URL="https://trialsga2025.jfrog.io"
+
+#           # Create new token (Set-Me-Up style)
+#           RESPONSE=$(curl -s -H "Authorization: Bearer $JFROG_PASSWORD" -X POST "$JFROG_URL/access/api/v1/tokens" \
+#             -H "Content-Type: application/json" \
+#             -d '{
+#                   "username": "'"$JFROG_USER"'",
+#                   "scope": "artifact:sga-npm:r,w",
+#                   "expires_in": 86400
+#                 }')
+
+#           # Extract token from JSON
+#           NEW_TOKEN=$(echo "$RESPONSE" | jq -r '.access_token')
+          
+#           echo "new_token=$NEW_TOKEN" >> $GITHUB_OUTPUT
+
+#       - name: Update GitHub secret with new JFrog token
+#         if: ${{ steps.check.outputs.days_left <= 365 }}
+#         run: |
+#           echo "New token obtained: ${{ steps.renew.outputs.new_token }}"
+#           echo "${{ steps.renew.outputs.new_token }}" | gh secret set ARTIFACTORY_TOKEN --repo "$GITHUB_REPO"
+
+#       - name: Create GitHub issue if token was renewed
+#         if: ${{ steps.check.outputs.days_left <= 365 }}
+#         uses: actions/github-script@v7
+#         with:
+#           github-token: ${{ secrets.GITHUB_TOKEN }}
+#           script: |
+#             await github.rest.issues.create({
+#               owner: context.repo.owner,
+#               repo: context.repo.repo,
+#               title: "JFrog Token Expiring Soon — Renewed",
+#               body: `The JFrog npm token was near expiry and has been automatically renewed.\nNew expiry in 7 days from now.`,
+#               labels: ["security","token","urgent"]
+#             })
+
+#       - name: Setup npm registry
+#         run: |
+#           echo "registry=https://trialsga2025.jfrog.io/artifactory/api/npm/sga-npm/" > .npmrc
+#           echo "//trialsga2025.jfrog.io/artifactory/api/npm/sga-npm/:_authToken=${{ secrets.ARTIFACTORY_TOKEN }}" >> .npmrc
+
+#       - name: Install dependencies
+#         run: npm install
+
+#       - name: Build project
+#         run: CI=false npm run build
+
+#       - name: Test project
+#         run: npm test
+
+#       - name: Publish package to Artifactory
+#         if: github.ref == 'refs/heads/main'
+#         run: npm publish
+
+
+
 name: JFrog Token Check & NPM Publish
 
 on:
@@ -20,10 +137,13 @@ jobs:
       JFROG_PASSWORD: ${{ secrets.JFROG_PASSWORD }}
       GH_PAT: ${{ secrets.GH_PAT }}
       GITHUB_REPO: ${{ github.repository }}
-      ARTIFACTORY_TOKEN : ${{ secrets.ARTIFACTORY_TOKEN }}
+      ARTIFACTORY_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
+      EMAIL_USER: ${{ secrets.EMAIL_USER }}
+      EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_PASS }}
+      EMAIL_TO: yahiayahiayahi@gmail.com  
     steps:
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y gh curl jq
+        run: sudo apt-get update && sudo apt-get install -y gh curl jq nodejs npm
 
       - name: Authenticate GitHub CLI
         run: echo "$GH_PAT" | gh auth login --with-token
@@ -49,37 +169,55 @@ jobs:
           DIFF=$((EXPIRY_EPOCH - NOW))
           DAYS_LEFT=$((DIFF / 86400))
           echo "days_left=$DAYS_LEFT" >> $GITHUB_OUTPUT
-          echo "$DAYS_LEFT days left for ${{ matrix.token.name }}"
+          echo "$DAYS_LEFT days left for ARTIFACTORY_TOKEN"
 
       - name: Renew JFrog token if near expiry
         id: renew
+        if: ${{ steps.check.outputs.days_left <= 365 }}
         run: |
-         echo "Token expired, generating new token..."
-          
-          # JFrog credentials (stored in GitHub Secrets)
-          JFROG_USER="${{ secrets.JFROG_USER }}"
-          JFROG_PASSWORD="${{ secrets.ARTIFACTORY_PASSWORD2 }}"
-          JFROG_URL="https://trialsga2025.jfrog.io"
-
-          # Create new token (Set-Me-Up style)
-          RESPONSE=$(curl -s -H "Authorization: Bearer $JFROG_PASSWORD" -X POST "$JFROG_URL/access/api/v1/tokens" \
+          echo "Token expired, generating new token..."
+          RESPONSE=$(curl -s -H "Authorization: Bearer $JFROG_PASSWORD" -X POST "https://trialsga2025.jfrog.io/access/api/v1/tokens" \
             -H "Content-Type: application/json" \
             -d '{
                   "username": "'"$JFROG_USER"'",
                   "scope": "artifact:sga-npm:r,w",
                   "expires_in": 86400
                 }')
-
-          # Extract token from JSON
           NEW_TOKEN=$(echo "$RESPONSE" | jq -r '.access_token')
-          
+          if [[ "$NEW_TOKEN" == "" || "$NEW_TOKEN" == "null" ]]; then
+            echo "Failed to renew ARTIFACTORY_TOKEN"
+            echo "JFrog response: $RESPONSE"
+            exit 1
+          fi
           echo "new_token=$NEW_TOKEN" >> $GITHUB_OUTPUT
 
       - name: Update GitHub secret with new JFrog token
         if: ${{ steps.check.outputs.days_left <= 365 }}
         run: |
-          echo "New token obtained: ${{ steps.renew.outputs.new_token }}"
           echo "${{ steps.renew.outputs.new_token }}" | gh secret set ARTIFACTORY_TOKEN --repo "$GITHUB_REPO"
+          echo "GitHub secret ARTIFACTORY_TOKEN updated."
+
+      - name: Send email notification
+        if: ${{ steps.check.outputs.days_left <= 365 }}
+        run: |
+          npm install nodemailer
+          node -e "
+          const nodemailer = require('nodemailer');
+          const transporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_APP_PASSWORD }
+          });
+          const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: process.env.EMAIL_TO,
+            subject: '⚠️ JFrog Token Renewed',
+            text: 'The ARTIFACTORY_TOKEN was near expiry and has been automatically renewed.\nNew token updated in GitHub secrets.'
+          };
+          transporter.sendMail(mailOptions, (err, info) => {
+            if (err) console.log('Error sending email:', err);
+            else console.log('Email sent:', info.response);
+          });
+          "
 
       - name: Create GitHub issue if token was renewed
         if: ${{ steps.check.outputs.days_left <= 365 }}
@@ -91,7 +229,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: "JFrog Token Expiring Soon — Renewed",
-              body: `The JFrog npm token was near expiry and has been automatically renewed.\nNew expiry in 7 days from now.`,
+              body: "The JFrog npm token was near expiry and has been automatically renewed.\nNew expiry in 7 days from now.",
               labels: ["security","token","urgent"]
             })
 
