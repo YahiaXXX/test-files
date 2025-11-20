@@ -237,7 +237,7 @@ jobs:
             for (const f of fs.readdirSync(dir)) {
               const full = path.join(dir, f);
               if (fs.statSync(full).isDirectory()) {
-                if (f !== 'node_modules' && f !== 'build') getAllFiles(full, arr);
+                if (f !== 'node_modules' && f !== 'build' && f!== '.git') getAllFiles(full, arr);
               } else {
                 arr.push(full);
               }
