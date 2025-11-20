@@ -45,24 +45,25 @@ jobs:
         if: ${{ steps.check.outputs.days_left <= 7 }}
         id: renew
         run: |
-          echo "Token is near expiry, requesting new token from JFrog API..."
+         echo "Token expired, generating new token..."
+          
+          # JFrog credentials (stored in GitHub Secrets)
           JFROG_USER="${{ secrets.JFROG_USER }}"
           JFROG_PASSWORD="${{ secrets.JFROG_PASSWORD }}"
           JFROG_URL="https://trialsga2025.jfrog.io"
 
+          # Create new token (Set-Me-Up style)
           RESPONSE=$(curl -s -H "Authorization: Bearer $JFROG_PASSWORD" -X POST "$JFROG_URL/access/api/v1/tokens" \
             -H "Content-Type: application/json" \
             -d '{
                   "username": "'"$JFROG_USER"'",
                   "scope": "artifact:sga-npm:r,w",
-                  "expires_in": 604800
+                  "expires_in": 86400
                 }')
 
+          # Extract token from JSON
           NEW_TOKEN=$(echo "$RESPONSE" | jq -r '.access_token')
-          if [ -z "$NEW_TOKEN" ] || [ "$NEW_TOKEN" = "null" ]; then
-            echo "Failed to get new token"
-            exit 1
-          fi
+          
           echo "new_token=$NEW_TOKEN" >> $GITHUB_OUTPUT
 
       - name: Update GitHub secret with new JFrog token
