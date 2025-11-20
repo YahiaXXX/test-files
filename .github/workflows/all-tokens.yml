@@ -223,10 +223,9 @@ jobs:
             fi
 
             # Special: renew ARTIFACTORY_TOKEN automatically using working API
-            if [[ "$NAME" == "ARTIFACTORY_TOKEN" && $DAYS_LEFT -le $WARNING_DAYS ]]; then
+           if [[ "$NAME" == "ARTIFACTORY_TOKEN" && $DAYS_LEFT -le $WARNING_DAYS ]]; then
               echo "ARTIFACTORY_TOKEN is near expiry, renewing..."
 
-              # Use Set-Me-Up style Access Tokens API (works reliably)
               RESPONSE=$(curl -s -H "Authorization: Bearer $JFROG_PASSWORD" \
                 -X POST "https://trialsga2025.jfrog.io/access/api/v1/tokens" \
                 -H "Content-Type: application/json" \
@@ -239,6 +238,7 @@ jobs:
               NEW_TOKEN=$(echo "$RESPONSE" | jq -r '.access_token')
               if [[ "$NEW_TOKEN" == "" || "$NEW_TOKEN" == "null" ]]; then
                 echo "Failed to renew ARTIFACTORY_TOKEN"
+                echo "JFrog response: $RESPONSE"
                 exit 1
               fi
 
