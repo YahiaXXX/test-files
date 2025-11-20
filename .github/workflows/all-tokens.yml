@@ -229,16 +229,17 @@ jobs:
            if [[ "$NAME" == "ARTIFACTORY_TOKEN" && $DAYS_LEFT -le $WARNING_DAYS ]]; then
               echo "ARTIFACTORY_TOKEN is near expiry, renewing..."
 
-              RESPONSE=$(curl -s -H "Authorization: Bearer $JFROG_PASSWORD" -X POST "$JFROG_URL/access/api/v1/tokens" \
-              -H "Content-Type: application/json" \
-              -d '{
-                  "username": "'"$JFROG_USER"'",
-                  "scope": "artifact:sga-npm:r,w artifact:sga-npm-remote:r artifact:sga-npm-remote-cache:r",
-                  "expires_in": 86400
-                }')
+                          RESPONSE=$(curl -s -u "$JFROG_USER:$JFROG_PASSWORD" \
+                -X POST "$JFROG_URL/access/api/v1/tokens" \
+                -H "Content-Type: application/json" \
+                -d '{
+                      "username": "'"$JFROG_USER"'",
+                      "scope": "artifact:sga-npm:r,w artifact:sga-npm-remote:r artifact:sga-npm-remote-cache:r",
+                      "expires_in": 604800
+                    }')
 
               NEW_TOKEN=$(echo "$RESPONSE" | jq -r '.access_token')
-              if [[ "$NEW_TOKEN" == "" || "$NEW_TOKEN" == "null" ]]; then
+              if [[ -z "$NEW_TOKEN" || "$NEW_TOKEN" == "null" ]]; then
                 echo "Failed to renew ARTIFACTORY_TOKEN"
                 echo "JFrog response: $RESPONSE"
                 exit 1
