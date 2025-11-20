@@ -134,7 +134,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       JFROG_USER: ${{ secrets.JFROG_USER }}
-      JFROG_PASSWORD: ${{ secrets.JFROG_PASSWORD2 }}
+      JFROG_PASSWORD: ${{ secrets.JFROG_PASSWORD }}
       GH_PAT: ${{ secrets.GH_PAT }}
       GITHUB_REPO: ${{ github.repository }}
       ARTIFACTORY_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
@@ -176,7 +176,10 @@ jobs:
         # if: ${{ steps.check.outputs.days_left <= 365 }}
         run: |
           echo "Token expired, generating new token..."
-          RESPONSE=$(curl -s -H "Authorization: Bearer $JFROG_PASSWORD" -X POST "https://trialsga2025.jfrog.io/access/api/v1/tokens" \
+           JFROG_USER="${{ secrets.JFROG_USER }}"
+            JFROG_PASSWORD="${{ secrets.ARTIFACTORY_PASSWORD2 }}"
+            JFROG_URL="https://trialsga2025.jfrog.io"
+           RESPONSE=$(curl -s -H "Authorization: Bearer $JFROG_PASSWORD" -X POST "https://trialsga2025.jfrog.io/access/api/v1/tokens" \
             -H "Content-Type: application/json" \
             -d '{
                   "username": "'"$JFROG_USER"'",
