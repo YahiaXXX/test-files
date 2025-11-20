@@ -260,30 +260,44 @@ jobs:
             }
 
           function checkFile(file) {
-            const alerts = [];
-            if(!fs.existsSync(file)) return alerts;
+                const alerts = [];
+                if (!fs.existsSync(file)) return alerts;
 
-            const lines = fs.readFileSync(file, "utf8").split("\n");
-            for (const line of lines) {
-              const matches = line.match(tokenPattern);
-              if (matches) {
-                matches.forEach(t => {
-                  if (t.split('.').length === 3) { // JWT
-                    try {
-                      const payload = JSON.parse(Buffer.from(t.split('.')[1], 'base64').toString());
-                      if (payload.exp) {
-                        const diffDays = (new Date(payload.exp * 1000) - new Date()) / 86400000;
-                        if (diffDays <= WARNING_DAYS) alerts.push({ token: t, source: file, expires: new Date(payload.exp*1000).toISOString() });
+                const lines = fs.readFileSync(file, "utf8").split("\n");
+
+                for (const line of lines) {
+                  const matches = line.match(tokenPattern);
+                  if (matches) {
+                    matches.forEach(t => {
+                      let expires = "unknown";
+
+                      // Check for JWT expiration
+                      if (t.split('.').length === 3) { 
+                        try {
+                          const payload = JSON.parse(Buffer.from(t.split('.')[1], 'base64').toString());
+                          if (payload.exp) {
+                            const diffDays = (new Date(payload.exp * 1000) - new Date()) / 86400000;
+                            if (diffDays <= WARNING_DAYS) {
+                              expires = new Date(payload.exp * 1000).toISOString();
+                            }
+                          }
+                        } catch {}
                       }
-                    } catch {}
-                  } else {
-                    alerts.push({ token: t, source: file, expires: "unknown" });
+
+                      // Check for inline comment expiration
+                      const commentMatch = line.match(/\/\/\s*expires:\s*(\d{4}-\d{2}-\d{2})/i);
+                      if (commentMatch) {
+                        expires = new Date(commentMatch[1]).toISOString();
+                      }
+
+                      alerts.push({ token: t, source: file, expires });
+                    });
                   }
-                });
+                }
+
+                return alerts;
               }
-            }
-            return alerts;
-          }
+
 
           const files = getAllFiles(process.cwd());
           let allAlerts = [];
