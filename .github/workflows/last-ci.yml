@@ -44,7 +44,7 @@ jobs:
           echo "Token expires in $DAYS_LEFT days"
 
       - name: Renew JFrog token if near expiry
-        if: ${{ steps.check.outputs.days_left <= 365 }}
+        # if: ${{ steps.check.outputs.days_left <= 365 }}
         id: renew
         run: |
          echo "Token expired, generating new token..."
