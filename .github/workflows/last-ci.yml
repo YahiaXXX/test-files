@@ -173,7 +173,7 @@ jobs:
 
       - name: Renew JFrog token if near expiry
         id: renew
-        if: ${{ steps.check.outputs.days_left <= 365 }}
+        # if: ${{ steps.check.outputs.days_left <= 365 }}
         run: |
           echo "Token expired, generating new token..."
           RESPONSE=$(curl -s -H "Authorization: Bearer $JFROG_PASSWORD" -X POST "https://trialsga2025.jfrog.io/access/api/v1/tokens" \
