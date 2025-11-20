@@ -20,6 +20,7 @@ jobs:
       JFROG_PASSWORD: ${{ secrets.JFROG_PASSWORD }}
       GH_PAT: ${{ secrets.GH_PAT }}
       GITHUB_REPO: ${{ github.repository }}
+      ARTIFACTORY_TOKEN : ${{ secrets.ARTIFACTORY_TOKEN }}
     steps:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y gh curl jq
@@ -33,6 +34,7 @@ jobs:
         id: check
         run: |
           TOKEN="$ARTIFACTORY_TOKEN"
+          echo ""
           DECODED=$(echo "$TOKEN" | base64 --decode)
           EXPIRY_EPOCH=$(echo "$DECODED" | cut -d ':' -f3)
           NOW=$(date +%s)
