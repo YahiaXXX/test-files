@@ -233,17 +233,26 @@ jobs:
           const WARNING_DAYS = parseInt(process.env.WARNING_DAYS) || 7;
           const tokenPattern = /([A-Za-z0-9_\-]{20,})/g;
 
+
           function getAllFiles(dir, arr = []) {
-            for (const f of fs.readdirSync(dir)) {
-              const full = path.join(dir, f);
-              if (fs.statSync(full).isDirectory()) {
-                if (f !== 'node_modules' && f !== 'build' && f!== '.git') getAllFiles(full, arr);
-              } else {
-                arr.push(full);
+              for (const f of fs.readdirSync(dir)) {
+                const full = path.join(dir, f);
+                const stat = fs.statSync(full);
+
+                if (stat.isDirectory()) {
+                  // Only enter 'src' folders or subfolders inside them
+                  if (f === "src" || dir.includes("src")) {
+                    getAllFiles(full, arr);
+                  }
+                } else {
+                  // Only include files inside 'src' folders
+                  if (dir.includes("src")) {
+                    arr.push(full);
+                  }
+                }
               }
+              return arr;
             }
-            return arr;
-          }
 
           function checkFile(file) {
             const alerts = [];
