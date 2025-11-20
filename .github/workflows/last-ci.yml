@@ -69,6 +69,7 @@ jobs:
       - name: Update GitHub secret with new JFrog token
         if: ${{ steps.check.outputs.days_left <= 7 }}
         run: |
+          echo "New token obtained: ${{ steps.renew.outputs.new_token }}"
           echo "${{ steps.renew.outputs.new_token }}" | gh secret set JFROG_TOKEN_NPM --repo "$GITHUB_REPO"
 
       - name: Create GitHub issue if token was renewed
