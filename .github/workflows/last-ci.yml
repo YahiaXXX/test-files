@@ -34,14 +34,22 @@ jobs:
         id: check
         run: |
           TOKEN="$ARTIFACTORY_TOKEN"
-          echo ""
-          DECODED=$(echo "$TOKEN" | base64 --decode)
-          EXPIRY_EPOCH=$(echo "$DECODED" | cut -d ':' -f3)
+          DAYS_LEFT=0
+          if [[ "$TOKEN" == reftkn:* ]]; then
+            DECODED=$(echo "$TOKEN" | base64 --decode 2>/dev/null || echo "$TOKEN")
+            EXPIRY_EPOCH=$(echo "$DECODED" | cut -d ':' -f3)
+          elif [[ "$TOKEN" =~ ^ey ]]; then
+            PAYLOAD=$(echo "$TOKEN" | cut -d '.' -f2 | base64 --decode | tr -d '\n')
+            EXPIRY_EPOCH=$(echo "$PAYLOAD" | jq -r '.exp')
+          else
+            echo "Unknown token format"
+            EXPIRY_EPOCH=0
+          fi
           NOW=$(date +%s)
           DIFF=$((EXPIRY_EPOCH - NOW))
           DAYS_LEFT=$((DIFF / 86400))
           echo "days_left=$DAYS_LEFT" >> $GITHUB_OUTPUT
-          echo "Token expires in $DAYS_LEFT days"
+          echo "$DAYS_LEFT days left for ${{ matrix.token.name }}"
 
       - name: Renew JFrog token if near expiry
         id: renew
