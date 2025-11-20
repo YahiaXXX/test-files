@@ -235,6 +235,8 @@ jobs:
 
 
           function getAllFiles(dir, arr = []) {
+              const excludedExtensions = ['.png', '.jpg', '.jpeg', '.pdf', '.svg'];
+
               for (const f of fs.readdirSync(dir)) {
                 const full = path.join(dir, f);
                 const stat = fs.statSync(full);
@@ -247,7 +249,10 @@ jobs:
                 } else {
                   // Only include files inside 'src' folders
                   if (dir.includes("src")) {
-                    arr.push(full);
+                    const ext = path.extname(f).toLowerCase();
+                    if (!excludedExtensions.includes(ext)) {
+                      arr.push(full);
+                    }
                   }
                 }
               }
