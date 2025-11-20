@@ -91,7 +91,7 @@ jobs:
           echo "//trialsga2025.jfrog.io/artifactory/api/npm/sga-npm/:_authToken=${{ steps.renew.outputs.new_token }}" >> .npmrc
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build project
         run: CI=false npm run build
