@@ -51,7 +51,7 @@ jobs:
           
           # JFrog credentials (stored in GitHub Secrets)
           JFROG_USER="${{ secrets.JFROG_USER }}"
-          JFROG_PASSWORD="${{ secrets.JFROG_PASSWORD }}"
+          JFROG_PASSWORD="${{ secrets.ARTIFACTORY_PASSWORD2 }}"
           JFROG_URL="https://trialsga2025.jfrog.io"
 
           # Create new token (Set-Me-Up style)
@@ -72,7 +72,7 @@ jobs:
         if: ${{ steps.check.outputs.days_left <= 7 }}
         run: |
           echo "New token obtained: ${{ steps.renew.outputs.new_token }}"
-          echo "${{ steps.renew.outputs.new_token }}" | gh secret set JFROG_TOKEN_NPM --repo "$GITHUB_REPO"
+          echo "${{ steps.renew.outputs.new_token }}" | gh secret set ARTIFACTORY_TOKEN --repo "$GITHUB_REPO"
 
       - name: Create GitHub issue if token was renewed
         if: ${{ steps.check.outputs.days_left <= 7 }}
